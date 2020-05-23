@@ -1,6 +1,7 @@
 Idris 2
 =======
 
+
 [![Build Status](https://travis-ci.org/idris-lang/Idris2.svg?branch=master)](https://travis-ci.org/idris-lang/Idris2)
 [![Documentation Status](https://readthedocs.org/projects/idris2/badge/?version=latest)](https://idris2.readthedocs.io/en/latest/?badge=latest)
 ![](https://github.com/idris-lang/Idris2/workflows/Windows%20CI/badge.svg)
