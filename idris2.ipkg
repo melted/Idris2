@@ -11,6 +11,7 @@ modules =
     Compiler.CompileExpr,
     Compiler.Inline,
     Compiler.LambdaLift,
+    Compiler.OCaml.Codegen,
     Compiler.Scheme.Chez,
     Compiler.Scheme.Racket,
     Compiler.Scheme.Gambit,
