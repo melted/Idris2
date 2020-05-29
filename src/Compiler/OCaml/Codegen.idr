@@ -33,6 +33,8 @@ data Loaded : Type where
 -- Label for noting which struct types are declared
 data Structs : Type where
 
+data Emitted : Type where
+
 
 ocamlString : String -> String
 ocamlString s = concatMap okchar (unpack s)
@@ -55,25 +57,78 @@ ocamlName (CaseBlock x y) = "case__" ++ show x ++ "_" ++ show y
 ocamlName (WithBlock x y) = "with__" ++ show x ++ "_" ++ show y
 ocamlName (Resolved i) = "fn__" ++ show i
 
+emit : { auto e : Ref Emitted (List String)} -> String -> Core ()
+emit str = do
+    xs <- get Emitted
+    put Emitted (str :: xs)
+
+comment : String -> String
+comment str = fastAppend ["(* ", str, " *)\n"]
+
 nameList : List Name -> String
-nameList names = showSep " " (map ocamlName names) 
+nameList names = showSep " " (map ocamlName names)
+
+mutual
+    emitArg : {auto ctxt : Ref Ctxt Defs} ->
+                {auto e : Ref Emitted (List String)} ->
+                NamedCExp -> Core ()
+    emitArg exp = do
+        emit $ " ("
+        compileExp exp
+        emit ")"
+
+    compileExp : {auto ctxt : Ref Ctxt Defs} ->
+                {auto e : Ref Emitted (List String)} ->
+                NamedCExp -> Core ()
+    compileExp (NmLocal fc name) = emit $ ocamlName name
+    compileExp (NmRef fc name) = emit $ ocamlName name
+    compileExp (NmLam fc var exp) = do
+        emit $ fastAppend ["(fun ", ocamlName var, " -> "]
+        compileExp exp
+        emit ")"
+    compileExp (NmLet fc var exp body) = do
+        emit $ fastAppend ["let ", ocamlName var, " = "]
+        compileExp exp
+        emit " in "
+        compileExp body
+        emit "\n"
+    compileExp (NmApp fc fn args) = do
+        compileExp fn
+        traverse emitArg args
+        emit " "
+  --  compileExp (NmCon fc name tag args) = 
+
+    compileExp e = do
+        coreLift $ putStrLn $ fastAppend ["I don't know how to compile ", show e]
 
 compileFun : {auto ctxt : Ref Ctxt Defs} ->
+             {auto e : Ref Emitted (List String)} ->
+             Name -> FC -> List Name -> NamedCExp -> Core ()
+compileFun name fc args exp = do
+    emit $ fastAppend [ "let ", ocamlName name, " ", nameList args, " =\n" ]
+    compileExp exp
+    emit ";;\n\n"
+
+compileDef' : {auto ctxt : Ref Ctxt Defs} ->
              {auto l : Ref Loaded (List String)} ->
              {auto s : Ref Structs (List String)} ->
-             Name -> FC -> List Name -> NamedCExp -> Core String
-compileFun name fc args exp = do
-    pure $ "let " ++ ocamlName name ++ " " ++ nameList args ++ " =\n"
-                    ++ show exp ++ "\n"
+             {auto e : Ref Emitted (List String)} ->
+            Name -> FC -> NamedDef -> Core ()
+compileDef' name fc (MkNmFun args exp) = compileFun name fc args exp
+compileDef' name fc ndef = pure ()
 
 compileDef : {auto ctxt : Ref Ctxt Defs} ->
              {auto l : Ref Loaded (List String)} ->
              {auto s : Ref Structs (List String)} ->
               (Name, FC, NamedDef) -> Core String
-compileDef (name, fc, (MkNmFun args exp)) = compileFun name fc args exp
-compileDef (name, fc, (MkNmCon tag arity nt)) = compileCon 
-compileDef (name, fc, ndef) = pure $ "(* " ++ ocamlName name ++ " *)\n"
-                                     ++ show ndef ++ "\n\n"
+compileDef (name, fc, ndef) = do
+    e <- newRef {t = List String} Emitted []
+    emit $ comment (ocamlName name)
+    emit $ comment (show ndef)
+    compileDef' name fc ndef
+    code <- get Emitted
+    pure $ fastAppend (reverse code)
+
 
 header : () -> String
 header _ = "(* placeholder for header *)\n"
@@ -95,9 +150,10 @@ compile ctxt dir term out = do
 
     l <- newRef {t = List String} Loaded ["libc", "libc 6"]
     s <- newRef {t = List String} Structs []
-    codeDefs <- traverse compileDef ndefs
+    
+    pieces <- traverse compileDef ndefs
     support <- readDataFile "ocaml/support.ml"
-    let code = fastAppend codeDefs
+    let code = fastAppend pieces
     let src = fastAppend [header (), support, code, footer ()]
     Right () <- coreLift $ writeFile outfile src
             | Left err => throw (FileErr outfile err)
