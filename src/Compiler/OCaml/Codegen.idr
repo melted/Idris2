@@ -105,10 +105,34 @@ mutual
                      NamedCExp -> List NamedConAlt -> Maybe NamedCExp  -> Core ()
     compileConCase sc alts def = pure ()
 
+    compileDefault :{auto ctxt : Ref Ctxt Defs} ->
+                     {auto e : Ref Emitted (List String)} ->
+                     Maybe NamedCExp -> Core ()
+    compileDefault Nothing = pure ()
+    compileDefault (Just exp) = do
+        emit " | _ -> "
+        compileExp exp
+        emit "\n"
+
+    compileConstAlt : {auto ctxt : Ref Ctxt Defs} ->
+                     {auto e : Ref Emitted (List String)} ->
+                     NamedConstAlt -> Core ()
+    compileConstAlt (MkNConstAlt c expr) = do
+        emit " | "
+        compileConstant c
+        emit " -> "
+        compileExp expr
+        emit "\n"
+
     compileConstCase : {auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
                      NamedCExp -> List NamedConstAlt -> Maybe NamedCExp -> Core ()
-    compileConstCase sc alts def = pure ()
+    compileConstCase sc alts def = do
+        emit "match "
+        compileExp sc
+        emit "with\n "
+        traverse compileConstAlt alts
+        compileDefault def
 
     compileExp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
@@ -130,13 +154,13 @@ mutual
         traverse (emitArg " (" ")") args
         emit " "
     compileExp (NmCon fc _ (Just n) args) = do
-        emit $ fastAppend ["{ tag=", show n, "; vals=[ "]
+        emit $ fastAppend ["(CON { tag=", show n, "; vals=[ "]
         traverse (emitArg " " ";") args
-        emit "] }"
+        emit "] })"
     compileExp (NmCon fc name Nothing args) = do
-        emit $ fastAppend ["{ name=", quotedName name, "; args=[ "]
+        emit $ fastAppend ["(NCON { name=", quotedName name, "; args=[ "]
         traverse (emitArg " " ";") args
-        emit "] }"
+        emit "] })"
     compileExp (NmOp fc fn args) = compileOp fn args
     compileExp (NmExtPrim fc name args) = compilePrim name args
     compileExp (NmForce fc exp) = do
