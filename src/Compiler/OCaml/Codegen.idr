@@ -1,8 +1,10 @@
 module Compiler.OCaml.Codegen
 
+import Compiler.ANF
 import Compiler.Common
 import Compiler.CompileExpr
 import Compiler.Inline
+import Compiler.LambdaLift
 
 import Core.Context
 import Core.Directory
@@ -46,7 +48,7 @@ ocamlString s = concatMap okchar (unpack s)
 
 export
 ocamlName : Name -> String
-ocamlName (NS ns n) = showSep "_" ns ++ "_" ++ ocamlName n
+ocamlName (NS ns n) = "ns_" ++ showSep "_" ns ++ "_" ++ ocamlName n
 ocamlName (UN n) = ocamlString n
 ocamlName (MN n i) = ocamlString n ++ "_" ++ show i
 ocamlName (PV n d) = "pat__" ++ ocamlName n
@@ -64,6 +66,16 @@ emit : { auto e : Ref Emitted (List String)} -> String -> Core ()
 emit str = do
     xs <- get Emitted
     put Emitted (str :: xs)
+
+varName : AVar -> String
+varName (ALocal i) = "v" ++ show i
+varName ANull = "V"
+
+varList : String -> List AVar -> String
+varList sep vars = showSep sep (map varName vars)
+
+argList : String -> List Int -> String
+argList sep vars = showSep sep (map (\i => "v"++show i) vars)
 
 comment : String -> String
 comment str = fastAppend ["(* ", str, " *)\n"]
@@ -126,60 +138,55 @@ getOp (Cast ty DoubleType) = Just "idris_to_double"
 getOp (Cast IntType CharType) = Just "idris_to_char"
 getOp _ = Nothing
 
+iota : Nat -> Int -> List Int
+iota Z _ = []
+iota (S n) i = i::iota n (i+1)
+
 mutual
-    emitArg : {auto ctxt : Ref Ctxt Defs} ->
-              {auto e : Ref Emitted (List String)} ->
-               String -> String -> NamedCExp -> Core ()
-    emitArg pfix suffix exp = do
-            emit $ pfix
-            compileExp exp
-            emit suffix
 
     compileOp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
-                PrimFn arity -> Vect arity NamedCExp -> Core ()
-    compileOp BelieveMe [_,_,exp] = compileExp exp
+                PrimFn arity -> Vect arity AVar -> Core ()
+    compileOp BelieveMe [_,_,exp] = emit $ varName exp
     compileOp op args = do
         case getOp op of
-            Just fn => do emit $ fastAppend["(", fn]
-                          traverse (emitArg " " "") (toList args)
+            Just fn => do emit $ fastAppend["(", fn, " "]
+                          emit $ varList " " (toList args)
                           emit ")"
             Nothing =>  coreLift $ putStrLn ("Can't handle " ++ show op)
 
     compilePrim : {auto ctxt : Ref Ctxt Defs} ->
                   {auto e : Ref Emitted (List String)} ->
-                  Name -> List NamedCExp -> Core ()
+                  Name -> List AVar -> Core ()
     compilePrim name args = coreLift $ putStrLn ("Unknown primitive " ++ show name)
 
     compileConAlt : {auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
-                     NamedConAlt -> Core ()
-    compileConAlt (MkNConAlt _ (Just i) args exp) = do
+                     AConAlt -> Core ()
+    compileConAlt (MkAConAlt _ (Just i) args exp) = do
         emit $ fastAppend [" | CON { tag=", show i, "; vals=[| "]
-        traverse (\n => emit $ fastAppend [ocamlName n, "; "]) args
+        emit (argList "; " args)
         emit "|] -> "
         compileExp exp
         emit "\n"
-    compileConAlt (MkNConAlt name Nothing args exp) = do
+    compileConAlt (MkAConAlt name Nothing args exp) = do
         emit $ fastAppend [" | NCON { name=", show name, "; args=[| "]
-        traverse (\n => emit $ fastAppend [ocamlName n, "; "]) args
+        emit (argList "; " args)
         emit "|] -> "
         compileExp exp
         emit "\n"
 
     compileConCase : {auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
-                     NamedCExp -> List NamedConAlt -> Maybe NamedCExp  -> Core ()
+                     AVar -> List AConAlt -> Maybe ANF  -> Core ()
     compileConCase sc alts def = do
-        emit "match "
-        compileExp sc
-        emit " with\n"
+        emit $ fastAppend ["match ", varName sc, " with\n"]
         traverse compileConAlt alts
         compileDefault def
 
     compileDefault :{auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
-                     Maybe NamedCExp -> Core ()
+                     Maybe ANF -> Core ()
     compileDefault Nothing = pure ()
     compileDefault (Just exp) = do
         emit " | _ -> "
@@ -188,8 +195,8 @@ mutual
 
     compileConstAlt : {auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
-                     NamedConstAlt -> Core ()
-    compileConstAlt (MkNConstAlt c expr) = do
+                     AConstAlt -> Core ()
+    compileConstAlt (MkAConstAlt c expr) = do
         emit " | "
         compileConstant c
         emit " -> "
@@ -198,65 +205,62 @@ mutual
 
     compileConstCase : {auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
-                     NamedCExp -> List NamedConstAlt -> Maybe NamedCExp -> Core ()
+                     AVar -> List AConstAlt -> Maybe ANF -> Core ()
     compileConstCase sc alts def = do
-        emit "match "
-        compileExp sc
-        emit " with\n"
+        emit $ fastAppend ["match ", varName sc, " with\n"]
         traverse compileConstAlt alts
         compileDefault def
 
     compileExp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
-                NamedCExp -> Core ()
-    compileExp (NmLocal fc name) = emit $ ocamlName name
-    compileExp (NmRef fc name) = emit $ ocamlName name
-    compileExp (NmLam fc var exp) = do
-        emit $ fastAppend ["(fun ", ocamlName var, " -> "]
-        compileExp exp
+                ANF -> Core ()
+    compileExp (AV _ var) = emit $ varName var
+    compileExp (AAppName _ name args) = do
+        emit $ fastAppend ["(", ocamlName name, " "]
+        emit $ varList " " args
         emit ")"
-    compileExp (NmLet fc var exp body) = do
-        emit $ fastAppend ["let ", ocamlName var, " = "]
+    compileExp (AUnderApp _ n m args) = do
+        let argList = map (\i => "c"++show i) (iota m 0)
+        traverse (\v => emit $ fastAppend ["(FUN (fun ", v, " -> "]) argList
+        emit $ fastAppend [ocamlName n, " "]
+        emit $ varList " " args
+        emit " "
+        emit $ showSep " " argList
+        emit $ (pack (replicate (2*length argList) ')'))
+        emit "\n"
+    compileExp (AApp _ f arg) =
+        emit $ fastAppend ["(idris_apply ", varName f, " ", varName arg, ")"]
+    compileExp (ALet _ var exp body) = do
+        emit $ fastAppend ["let v", show var, " = "]
         compileExp exp
         emit " in "
         compileExp body
         emit "\n"
-    compileExp (NmApp fc fn args) = do
-        compileExp fn
-        traverse (emitArg " (" ")") args
-        emit " "
-    compileExp (NmCon fc _ (Just n) args) = do
+    compileExp (ACon fc _ (Just n) args) = do
         emit $ fastAppend ["(CON { tag=", show n, "; vals=[| "]
-        traverse (emitArg " " ";") args
+        emit $ varList "; " args
         emit "|] })"
-    compileExp (NmCon fc name Nothing args) = do
+    compileExp (ACon fc name Nothing args) = do
         emit $ fastAppend ["(NCON { name=", quotedName name, "; args=[| "]
-        traverse (emitArg " " ";") args
+        emit $ varList "; " args
         emit "|] })"
-    compileExp (NmOp fc fn args) = compileOp fn args
-    compileExp (NmExtPrim fc name args) = compilePrim name args
-    compileExp (NmForce fc exp) = do
-        emit "("
-        compileExp exp
-        emit ") ()"
-    compileExp (NmDelay fc exp) = do
-        emit "(fun _ -> "
-        compileExp exp
-        emit ")"
-    compileExp (NmConCase fc sc alts def) = compileConCase sc alts def
-    compileExp (NmConstCase fc sc alts def) = compileConstCase sc alts def
-    compileExp (NmPrimVal fc c) = compileConstant c
-    compileExp (NmErased fc) = emit "()"
-    compileExp (NmCrash fc msg) =
+    compileExp (AOp fc fn args) = compileOp fn args
+    compileExp (AExtPrim fc name args) = compilePrim name args
+
+    compileExp (AConCase fc sc alts def) = compileConCase sc alts def
+    compileExp (AConstCase fc sc alts def) = compileConstCase sc alts def
+    compileExp (APrimVal fc c) = compileConstant c
+    compileExp (AErased fc) = emit "()"
+    compileExp (ACrash fc msg) =
         emit $ fastAppend ["(raise (Idris_exception ", show msg, "))"]
     compileExp e = do
         coreLift $ putStrLn $ fastAppend ["I don't know how to compile ", show e]
 
 compileFun : {auto ctxt : Ref Ctxt Defs} ->
              {auto e : Ref Emitted (List String)} ->
-             Name -> FC -> List Name -> NamedCExp -> Core ()
-compileFun name fc args exp = do
-    emit $ fastAppend [ "let rec ", ocamlName name, " ", nameList args, " =\n" ]
+             Name -> List Int -> ANF -> Core ()
+compileFun name args exp = do
+    emit $ fastAppend [ "let rec ", ocamlName name, " ", argList " " args, " =\n" ]
     compileExp exp
     emit ";;\n\n"
 
@@ -264,20 +268,19 @@ compileDef' : {auto ctxt : Ref Ctxt Defs} ->
              {auto l : Ref Loaded (List String)} ->
              {auto s : Ref Structs (List String)} ->
              {auto e : Ref Emitted (List String)} ->
-            Name -> FC -> NamedDef -> Core ()
-compileDef' name fc (MkNmFun args exp) = compileFun name fc args exp
-compileDef' name fc ndef = pure ()
+            Name -> ANFDef -> Core ()
+compileDef' name (MkAFun args exp) = compileFun name args exp
+compileDef' name ndef = pure ()
 
 compileDef : {auto ctxt : Ref Ctxt Defs} ->
              {auto l : Ref Loaded (List String)} ->
              {auto s : Ref Structs (List String)} ->
-              (Name, FC, NamedDef) -> Core String
-compileDef (name, fc, ndef) = do
+              (Name, ANFDef) -> Core String
+compileDef (name, def) = do
     e <- newRef {t = List String} Emitted []
-    compileDef' name fc ndef
+    compileDef' name def
     code <- get Emitted
     pure $ fastAppend (reverse code)
-
 
 header : () -> String
 header _ = "(* placeholder for header *)\n"
@@ -295,12 +298,12 @@ compile ctxt dir term out = do
     directives <- getDirectives OCaml
     cdata <- getCompileData Cases term
     let ndefs = namedDefs cdata
-    let ctm = forget (mainExpr cdata)
+    let adefs = anf cdata
 
     l <- newRef {t = List String} Loaded ["libc", "libc 6"]
     s <- newRef {t = List String} Structs []
 
-    pieces <- traverse compileDef ndefs
+    pieces <- traverse compileDef adefs
     support <- readDataFile "ocaml/support.ml"
     let code = fastAppend pieces
     let src = fastAppend [header (), support, code, footer ()]

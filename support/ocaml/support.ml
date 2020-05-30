@@ -2,11 +2,16 @@
 
 exception Idris_exception of string;;
 (*  Z.t comes from the Zarith library *)
-type ival =  I of int | BI of Z.t | D of float | C of char | S of string | CON of con | NCON of ncon | TT of bool
+type ival =  I of int | BI of Z.t | D of float | C of char | S of string | CON of con | NCON of ncon | TT of bool | FUN of (ival -> ival) | V
 and con = { tag : int; vals : ival array }
 and ncon = { name : string; args : ival array };;
 
 let idris_putStr str = print_string str
+
+let idris_apply f a =
+  match f with
+    | FUN fn -> fn a
+    | _ -> raise (Idris_exception "trying to call non function")
 
 let idris_add a b =
   match (a,b) with
