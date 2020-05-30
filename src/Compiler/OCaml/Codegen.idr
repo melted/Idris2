@@ -74,12 +74,57 @@ nameList names = showSep " " (map ocamlName names)
 compileConstant : {auto e : Ref Emitted (List String)} ->
                   Constant -> Core ()
 compileConstant (I n) = emit $ fastAppend ["(I ", show n, ")" ]
-compileConstant (BI n) = emit $ fastAppend ["(BI (Z.of_string \"", show n, "\"))"]
+compileConstant (BI n) = emit $ fastAppend ["(I ", show n, ")" ]
+-- compileConstant (BI n) = emit $ fastAppend ["(BI (Z.of_string \"", show n, "\"))"]
 compileConstant (Str str) = emit $ fastAppend ["(S ", show str, ")"]
 compileConstant (Ch c) = emit $ fastAppend ["(C ", show c, ")"]
 compileConstant (Db d) = emit $ fastAppend ["(D ", show d, ")"]
 compileConstant WorldVal = emit $ "(TT false)"
 compileConstant _ = emit $ "(TT true)"
+
+getOp : PrimFn arity -> Maybe String
+getOp (Add ty) = Just "idris_add"
+getOp (Sub ty) = Just "idris_sub"
+getOp (Mul ty) = Just "idris_mul"
+getOp (Div ty) = Just "idris_sub"
+getOp (Mod ty) = Just "idris_mod"
+getOp (Neg ty) = Just "idris_neg"
+getOp (ShiftL ty) = Just "idris_shl"
+getOp (ShiftR ty) = Just "idris_shr"
+getOp (BAnd ty) = Just "idris_and"
+getOp (Bor ty) = Just "idris_or"
+getOp (BXor ty) = Just "idris_xor"
+getOp (LT ty) = Just "idris_lt"
+getOp (LTE ty) = Just "idris_lte"
+getOp (EQ ty) = Just "idris_eq"
+getOp (GTE ty) = Just "idris_gte"
+getOp (GT ty) = Just "idris_gt"
+getOp StrLength = Just "idris_strlen"
+getOp StrHead = Just "idris_strhead"
+getOp StrTail = Just "idris_strtail"
+getOp StrIndex = Just "idris_strindex"
+getOp StrCons = Just "idris_strappend"
+getOp StrAppend = Just "idris_strrev"
+getOp StrSubstr = Just "idris_substr"
+getOp DoubleExp = Just "idris_exp"
+getOp DoubleLog = Just "idris_log"
+getOp DoubleSin = Just "idris_sin"
+getOp DoubleCos = Just "idris_cos"
+getOp DoubleTan = Just "idris_tan"
+getOp DoubleASin = Just "idris_asin"
+getOp DoubleACos = Just "idris_acos"
+getOp DoubleATan = Just "idris_atan"
+getOp DoubleSqrt = Just "idris_sqrt"
+getOp DoubleFloor = Just "idris_floor"
+getOp DoubleCeiling = Just "idris_ceil"
+getOp Crash = Just "idris_crash"
+
+getOp (Cast ty StringType) = Just "idris_to_string"
+getOp (Cast ty IntType) = Just "idris_to_int"
+getOp (Cast ty IntegerType) = Just "idris_to_int"
+getOp (Cast ty DoubleType) = Just "idris_to_double"
+getOp (Cast Int CharType) = Just "idris_to_char"
+getOp _ = Nothing
 
 mutual
     emitArg : {auto ctxt : Ref Ctxt Defs} ->
@@ -93,17 +138,44 @@ mutual
     compileOp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
                 PrimFn arity -> Vect arity NamedCExp -> Core ()
-    compileOp fn args = coreLift $ putStrLn ("Can't handle " ++ show fn)
+    compileOp BelieveMe [_,_,exp] = compileExp exp 
+    compileOp op args = do
+        case getOp op of 
+            Just fn => do emit $ fastAppend["(", fn]
+                          traverse (emitArg " " "") (toList args)
+                          emit ")"
+            Nothing =>  coreLift $ putStrLn ("Can't handle " ++ show op) 
 
     compilePrim : {auto ctxt : Ref Ctxt Defs} ->
                   {auto e : Ref Emitted (List String)} ->
                   Name -> List NamedCExp -> Core ()
     compilePrim name args = coreLift $ putStrLn ("Unknown primitive " ++ show name)
 
+    compileConAlt : {auto ctxt : Ref Ctxt Defs} ->
+                     {auto e : Ref Emitted (List String)} ->
+                     NamedConAlt -> Core ()
+    compileConAlt (MkNConAlt _ (Just i) args exp) = do
+        emit $ fastAppend [" | CON { tag=", show i, "; vals=[| "]
+        traverse (\n => emit $ fastAppend [ocamlName n, "; "]) args
+        emit "|] -> "
+        compileExp exp
+        emit "\n" 
+    compileConAlt (MkNConAlt name Nothing args exp) = do
+        emit $ fastAppend [" | NCON { name=", show name, "; args=[| "]
+        traverse (\n => emit $ fastAppend [ocamlName n, "; "]) args
+        emit "|] -> "
+        compileExp exp
+        emit "\n" 
+    
     compileConCase : {auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
                      NamedCExp -> List NamedConAlt -> Maybe NamedCExp  -> Core ()
-    compileConCase sc alts def = pure ()
+    compileConCase sc alts def = do
+        emit "match "
+        compileExp sc
+        emit " with\n"
+        traverse compileConAlt alts
+        compileDefault def
 
     compileDefault :{auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
@@ -130,7 +202,7 @@ mutual
     compileConstCase sc alts def = do
         emit "match "
         compileExp sc
-        emit "with\n "
+        emit " with\n"
         traverse compileConstAlt alts
         compileDefault def
 
@@ -154,13 +226,13 @@ mutual
         traverse (emitArg " (" ")") args
         emit " "
     compileExp (NmCon fc _ (Just n) args) = do
-        emit $ fastAppend ["(CON { tag=", show n, "; vals=[ "]
+        emit $ fastAppend ["(CON { tag=", show n, "; vals=[| "]
         traverse (emitArg " " ";") args
-        emit "] })"
+        emit "|] })"
     compileExp (NmCon fc name Nothing args) = do
-        emit $ fastAppend ["(NCON { name=", quotedName name, "; args=[ "]
+        emit $ fastAppend ["(NCON { name=", quotedName name, "; args=[| "]
         traverse (emitArg " " ";") args
-        emit "] })"
+        emit "|] })"
     compileExp (NmOp fc fn args) = compileOp fn args
     compileExp (NmExtPrim fc name args) = compilePrim name args
     compileExp (NmForce fc exp) = do
