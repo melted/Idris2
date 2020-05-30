@@ -71,6 +71,16 @@ comment str = fastAppend ["(* ", str, " *)\n"]
 nameList : List Name -> String
 nameList names = showSep " " (map ocamlName names)
 
+compileConstant : {auto e : Ref Emitted (List String)} ->
+                  Constant -> Core ()
+compileConstant (I n) = emit $ fastAppend ["(I ", show n, ")" ]
+compileConstant (BI n) = emit $ fastAppend ["(BI (Z.of_string \"", show n, "\"))"]
+compileConstant (Str str) = emit $ fastAppend ["(S ", show str, ")"]
+compileConstant (Ch c) = emit $ fastAppend ["(C ", show c, ")"]
+compileConstant (Db d) = emit $ fastAppend ["(D ", show d, ")"]
+compileConstant WorldVal = emit $ "(TT false)"
+compileConstant _ = emit $ "(TT true)"
+
 mutual
     emitArg : {auto ctxt : Ref Ctxt Defs} ->
               {auto e : Ref Emitted (List String)} ->
@@ -89,6 +99,16 @@ mutual
                   {auto e : Ref Emitted (List String)} ->
                   Name -> List NamedCExp -> Core ()
     compilePrim name args = coreLift $ putStrLn ("Unknown primitive " ++ show name)
+
+    compileConCase : {auto ctxt : Ref Ctxt Defs} ->
+                     {auto e : Ref Emitted (List String)} ->
+                     NamedCExp -> List NamedConAlt -> Maybe NamedCExp  -> Core ()
+    compileConCase sc alts def = pure ()
+
+    compileConstCase : {auto ctxt : Ref Ctxt Defs} ->
+                     {auto e : Ref Emitted (List String)} ->
+                     NamedCExp -> List NamedConstAlt -> Maybe NamedCExp -> Core ()
+    compileConstCase sc alts def = pure ()
 
     compileExp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
@@ -119,6 +139,20 @@ mutual
         emit "] }"
     compileExp (NmOp fc fn args) = compileOp fn args
     compileExp (NmExtPrim fc name args) = compilePrim name args
+    compileExp (NmForce fc exp) = do
+        emit "("
+        compileExp exp
+        emit ") ()"
+    compileExp (NmDelay fc exp) = do
+        emit "(fun _ -> "
+        compileExp exp
+        emit ")"
+    compileExp (NmConCase fc sc alts def) = compileConCase sc alts def
+    compileExp (NmConstCase fc sc alts def) = compileConstCase sc alts def
+    compileExp (NmPrimVal fc c) = compileConstant c
+    compileExp (NmErased fc) = emit "()"
+    compileExp (NmCrash fc msg) =
+        emit $ fastAppend ["(raise (Idris_exception ", show msg, "))"]
     compileExp e = do
         coreLift $ putStrLn $ fastAppend ["I don't know how to compile ", show e]
 
