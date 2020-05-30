@@ -92,8 +92,8 @@ getOp (Neg ty) = Just "idris_neg"
 getOp (ShiftL ty) = Just "idris_shl"
 getOp (ShiftR ty) = Just "idris_shr"
 getOp (BAnd ty) = Just "idris_and"
-getOp (Bor ty) = Just "idris_or"
-getOp (BXor ty) = Just "idris_xor"
+getOp (BOr ty) = Just "idris_or"
+getOp (BXOr ty) = Just "idris_xor"
 getOp (LT ty) = Just "idris_lt"
 getOp (LTE ty) = Just "idris_lte"
 getOp (EQ ty) = Just "idris_eq"
@@ -123,7 +123,7 @@ getOp (Cast ty StringType) = Just "idris_to_string"
 getOp (Cast ty IntType) = Just "idris_to_int"
 getOp (Cast ty IntegerType) = Just "idris_to_int"
 getOp (Cast ty DoubleType) = Just "idris_to_double"
-getOp (Cast Int CharType) = Just "idris_to_char"
+getOp (Cast IntType CharType) = Just "idris_to_char"
 getOp _ = Nothing
 
 mutual
@@ -138,13 +138,13 @@ mutual
     compileOp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
                 PrimFn arity -> Vect arity NamedCExp -> Core ()
-    compileOp BelieveMe [_,_,exp] = compileExp exp 
+    compileOp BelieveMe [_,_,exp] = compileExp exp
     compileOp op args = do
-        case getOp op of 
+        case getOp op of
             Just fn => do emit $ fastAppend["(", fn]
                           traverse (emitArg " " "") (toList args)
                           emit ")"
-            Nothing =>  coreLift $ putStrLn ("Can't handle " ++ show op) 
+            Nothing =>  coreLift $ putStrLn ("Can't handle " ++ show op)
 
     compilePrim : {auto ctxt : Ref Ctxt Defs} ->
                   {auto e : Ref Emitted (List String)} ->
@@ -159,14 +159,14 @@ mutual
         traverse (\n => emit $ fastAppend [ocamlName n, "; "]) args
         emit "|] -> "
         compileExp exp
-        emit "\n" 
+        emit "\n"
     compileConAlt (MkNConAlt name Nothing args exp) = do
         emit $ fastAppend [" | NCON { name=", show name, "; args=[| "]
         traverse (\n => emit $ fastAppend [ocamlName n, "; "]) args
         emit "|] -> "
         compileExp exp
-        emit "\n" 
-    
+        emit "\n"
+
     compileConCase : {auto ctxt : Ref Ctxt Defs} ->
                      {auto e : Ref Emitted (List String)} ->
                      NamedCExp -> List NamedConAlt -> Maybe NamedCExp  -> Core ()
@@ -274,8 +274,6 @@ compileDef : {auto ctxt : Ref Ctxt Defs} ->
               (Name, FC, NamedDef) -> Core String
 compileDef (name, fc, ndef) = do
     e <- newRef {t = List String} Emitted []
-    emit $ comment (ocamlName name)
-    emit $ comment (show ndef)
     compileDef' name fc ndef
     code <- get Emitted
     pure $ fastAppend (reverse code)
@@ -301,7 +299,7 @@ compile ctxt dir term out = do
 
     l <- newRef {t = List String} Loaded ["libc", "libc 6"]
     s <- newRef {t = List String} Structs []
-    
+
     pieces <- traverse compileDef ndefs
     support <- readDataFile "ocaml/support.ml"
     let code = fastAppend pieces
