@@ -216,31 +216,7 @@ schArglist [] = ""
 schArglist [x] = schName x
 schArglist (x :: xs) = schName x ++ " " ++ schArglist xs
 
-mutual
-  used : Name -> NamedCExp -> Bool
-  used n (NmLocal fc n') = n == n'
-  used n (NmRef _ _) = False
-  used n (NmLam _ _ sc) = used n sc
-  used n (NmLet _ _ v sc) = used n v || used n sc
-  used n (NmApp _ f args) = used n f || anyTrue (map (used n) args)
-  used n (NmCon _ _ _ args) = anyTrue (map (used n) args)
-  used n (NmOp _ _ args) = anyTrue (toList (map (used n) args))
-  used n (NmExtPrim _ _ args) = anyTrue (map (used n) args)
-  used n (NmForce _ t) = used n t
-  used n (NmDelay _ t) = used n t
-  used n (NmConCase _ sc alts def)
-      = used n sc || anyTrue (map (usedCon n) alts)
-            || maybe False (used n) def
-  used n (NmConstCase _ sc alts def)
-      = used n sc || anyTrue (map (usedConst n) alts)
-            || maybe False (used n) def
-  used n _ = False
 
-  usedCon : Name -> NamedConAlt -> Bool
-  usedCon n (MkNConAlt _ _ _ sc) = used n sc
-
-  usedConst : Name -> NamedConstAlt -> Bool
-  usedConst n (MkNConstAlt _ sc) = used n sc
 
 parameters (schExtPrim : Int -> ExtPrim -> List NamedCExp -> Core String,
             schString : String -> String)
@@ -257,7 +233,7 @@ parameters (schExtPrim : Int -> ExtPrim -> List NamedCExp -> Core String,
         bindArgs : Int -> (ns : List Name) -> String -> String
         bindArgs i [] body = body
         bindArgs i (n :: ns) body
-            = if used n sc
+            = if CompileExpr.used n sc
                  then "(let ((" ++ schName n ++ " " ++ "(vector-ref " ++ target ++ " " ++ show i ++ "))) "
                     ++ bindArgs (i + 1) ns body ++ ")"
                  else bindArgs (i + 1) ns body
@@ -269,7 +245,7 @@ parameters (schExtPrim : Int -> ExtPrim -> List NamedCExp -> Core String,
         bindArgs : Int -> (ns : List Name) -> String -> String
         bindArgs i [] body = body
         bindArgs i (n :: ns) body
-            = if used n sc
+            = if CompileExpr.used n sc
                  then "(let ((" ++ schName n ++ " " ++ "(vector-ref " ++ target ++ " " ++ show i ++ "))) "
                     ++ bindArgs (i + 1) ns body ++ ")"
                  else bindArgs (i + 1) ns body

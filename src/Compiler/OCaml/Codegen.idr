@@ -57,6 +57,9 @@ ocamlName (CaseBlock x y) = "case__" ++ show x ++ "_" ++ show y
 ocamlName (WithBlock x y) = "with__" ++ show x ++ "_" ++ show y
 ocamlName (Resolved i) = "fn__" ++ show i
 
+quotedName : Name -> String
+quotedName name = fastAppend ["\"", ocamlName name, "\""]
+
 emit : { auto e : Ref Emitted (List String)} -> String -> Core ()
 emit str = do
     xs <- get Emitted
@@ -70,12 +73,22 @@ nameList names = showSep " " (map ocamlName names)
 
 mutual
     emitArg : {auto ctxt : Ref Ctxt Defs} ->
+              {auto e : Ref Emitted (List String)} ->
+               String -> String -> NamedCExp -> Core ()
+    emitArg pfix suffix exp = do
+            emit $ pfix
+            compileExp exp
+            emit suffix
+
+    compileOp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
-                NamedCExp -> Core ()
-    emitArg exp = do
-        emit $ " ("
-        compileExp exp
-        emit ")"
+                PrimFn arity -> Vect arity NamedCExp -> Core ()
+    compileOp fn args = coreLift $ putStrLn ("Can't handle " ++ show fn)
+
+    compilePrim : {auto ctxt : Ref Ctxt Defs} ->
+                  {auto e : Ref Emitted (List String)} ->
+                  Name -> List NamedCExp -> Core ()
+    compilePrim name args = coreLift $ putStrLn ("Unknown primitive " ++ show name)
 
     compileExp : {auto ctxt : Ref Ctxt Defs} ->
                 {auto e : Ref Emitted (List String)} ->
@@ -94,10 +107,18 @@ mutual
         emit "\n"
     compileExp (NmApp fc fn args) = do
         compileExp fn
-        traverse emitArg args
+        traverse (emitArg " (" ")") args
         emit " "
-  --  compileExp (NmCon fc name tag args) = 
-
+    compileExp (NmCon fc _ (Just n) args) = do
+        emit $ fastAppend ["{ tag=", show n, "; vals=[ "]
+        traverse (emitArg " " ";") args
+        emit "] }"
+    compileExp (NmCon fc name Nothing args) = do
+        emit $ fastAppend ["{ name=", quotedName name, "; args=[ "]
+        traverse (emitArg " " ";") args
+        emit "] }"
+    compileExp (NmOp fc fn args) = compileOp fn args
+    compileExp (NmExtPrim fc name args) = compilePrim name args
     compileExp e = do
         coreLift $ putStrLn $ fastAppend ["I don't know how to compile ", show e]
 
@@ -105,7 +126,7 @@ compileFun : {auto ctxt : Ref Ctxt Defs} ->
              {auto e : Ref Emitted (List String)} ->
              Name -> FC -> List Name -> NamedCExp -> Core ()
 compileFun name fc args exp = do
-    emit $ fastAppend [ "let ", ocamlName name, " ", nameList args, " =\n" ]
+    emit $ fastAppend [ "let rec ", ocamlName name, " ", nameList args, " =\n" ]
     compileExp exp
     emit ";;\n\n"
 
