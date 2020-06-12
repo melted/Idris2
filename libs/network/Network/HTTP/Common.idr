@@ -6,6 +6,9 @@ import Data.Buffer
 import Data.List
 
 public export
+data HTTPError = ParseError String | OtherError String
+
+public export
 data Method = GET | PUT | HEAD | POST | DELETE | OPTIONS | TRACE |
               CONNECT | CUSTOM String
 
@@ -29,6 +32,7 @@ record Body where
     contentSize : Int
     -- TODO: should be able to use a Buffer here
     content : String
+
 
 -- TODO: need to keep apart URI that's used by network and
 -- what goes into the Request
@@ -54,13 +58,16 @@ record Response where
 crlf : String
 crlf = "\r\n"
 
+version : String
+version = "HTTP/1.1"
+
 renderBody : Body -> String
-renderBody b = maybe "" (\t => "content-type: " ++ t ++ crlf) (contentType b) ++
-               "content-size: " ++ show (contentSize b) ++ crlf ++ crlf ++
+renderBody b = maybe "" (\t => "content-type:" ++ t ++ crlf) (contentType b) ++
+               "content-size:" ++ show (contentSize b) ++ crlf ++ crlf ++
                content b
 
 renderHeader : (String, String) -> String
-renderHeader (name, content) = name ++ ": " ++ content ++ crlf
+renderHeader (name, content) = name ++ ":" ++ content ++ crlf
 
 export
 buildRequestString : Request -> String
@@ -69,8 +76,15 @@ buildRequestString req = show (requestMethod req) ++ " " ++ requestUri req ++ " 
     maybe "" renderBody (requestBody req)
 
 export
+buildResponseString : Response -> String
+buildResponseString resp = responseVersion resp ++ " " ++
+    show (responseCode resp) ++ " " ++  responseText resp ++ crlf ++
+    concatMap renderHeader (responseHeaders resp) ++
+    maybe "" renderBody (responseBody resp)
+
+export
 request : Method -> String -> List (String, String) -> Maybe String -> Maybe String -> Request
-request meth uri headers ct body = MkRequest uri meth "HTTP/1.1" headers
+request meth uri headers ct body = MkRequest uri meth version headers
                                     (map (\c => MkBody ct (cast $ length c) c) body)
 
 export
@@ -115,7 +129,15 @@ getStatusText 504 = "Gateway Timeout"
 getStatusText 505 = "HTTP Version Not Supported"
 getStatusText _ = ""
 
+export
+response : Int -> List (String, String) -> Maybe String -> Maybe String -> Response
+response code headers ctype body = MkResponse version code (getStatusText code)
+            headers (map (\c => MkBody ctype (cast $ length c) c) body)
 
+export
+ok : String -> Response
+ok text = response 200 [] (Just "text/html") (Just text)
 
-
-
+export
+notFound : Maybe String -> Response
+notFound text = response 404 [] (Just "text/html") text
