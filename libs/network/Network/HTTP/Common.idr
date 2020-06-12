@@ -27,8 +27,11 @@ record Body where
     constructor MkBody
     contentType : Maybe String
     contentSize : Int
+    -- TODO: should be able to use a Buffer here
     content : String
 
+-- TODO: need to keep apart URI that's used by network and
+-- what goes into the Request
 export
 record Request where
     constructor MkRequest
@@ -57,7 +60,7 @@ renderBody b = maybe "" (\t => "content-type: " ++ t ++ crlf) (contentType b) ++
                content b
 
 renderHeader : (String, String) -> String
-renderHeader (name, content) = show name ++ ": " ++ show content ++ crlf
+renderHeader (name, content) = name ++ ": " ++ content ++ crlf
 
 export
 buildRequestString : Request -> String
@@ -73,4 +76,46 @@ request meth uri headers ct body = MkRequest uri meth "HTTP/1.1" headers
 export
 getRequest : String -> Request
 getRequest uri = request GET uri [] Nothing Nothing
+
+getStatusText : Int -> String
+getStatusText 100 = "Continue"
+getStatusText 101 = "Switching Protocols"
+getStatusText 200 = "OK"
+getStatusText 201 = "Created"
+getStatusText 202 = "Accepted"
+getStatusText 203 = "Non-Authoritative Information"
+getStatusText 204 = "No Content"
+getStatusText 205 = "Reset Content"
+getStatusText 300 = "Multiple Choices"
+getStatusText 301 = "Moved Permanently"
+getStatusText 302 = "Found"
+getStatusText 303 = "See Other"
+getStatusText 305 = "Use Proxy"
+getStatusText 307 = "Temporary Redirect"
+getStatusText 400 = "Bad Request"
+getStatusText 402 = "Payment Required"
+getStatusText 403 = "Forbidden"
+getStatusText 404 = "Not Found"
+getStatusText 405 = "Method Not Allowed"
+getStatusText 406 = "Not Acceptable"
+getStatusText 408 = "Request Timeout"
+getStatusText 409 = "Conflict"
+getStatusText 410 = "Gone"
+getStatusText 411 = "Length Required"
+getStatusText 413 = "Payload Too Large"
+getStatusText 414 = "URI Too Long"
+getStatusText 415 = "Unsupported Media Type"
+getStatusText 417 = "Expectation Failed"
+getStatusText 426 = "Upgrade Required"
+getStatusText 500 = "Internal Server Error"
+getStatusText 501 = "Not Implemented"
+getStatusText 502 = "Bad Gateway"
+getStatusText 503 = "Service Unavailable"
+getStatusText 504 = "Gateway Timeout"
+getStatusText 505 = "HTTP Version Not Supported"
+getStatusText _ = ""
+
+
+
+
 
