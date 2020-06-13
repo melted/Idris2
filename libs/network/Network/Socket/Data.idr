@@ -57,6 +57,10 @@ EAGAIN =
   -- maybe
   unsafePerformIO $ primIO $ idrnet_geteagain
 
+export
+EBUFFER : Int
+EBUFFER = -1234
+
 -- ---------------------------------------------------------------- [ Error Code ]
 
 -- repeat without export to avoid dependency cycles
