@@ -175,15 +175,11 @@ export
 recvAll : HasIO io => (sock : Socket) -> io (Either SocketError Buffer)
 recvAll sock = recvRec [] 64
   where
-    mergeBuffers : List Buffer -> IO (Either SocketError Buffer)
-    mergeBuffers [] = pure $ Left EBUFFER
-    mergeBuffers [buf] = pure $ Right buf
-    mergeBuffers (x::y::xs) = do Just xy <- concatBuffers x y
-                                      | Nothing => pure $ Left EBUFFER
-                                 mergeBuffers (xy::xs)
-    recvRec : List Buffer -> Int -> IO (Either SocketError Buffer)
+    recvRec : List Buffer -> Int -> io (Either SocketError Buffer)
     recvRec acc n = case !(recv sock n) of
-                      Left 0 => mergeBuffers acc
+                      Left 0 => case !(concatBuffers (reverse acc)) of
+                                  Just buf => pure $ Right buf
+                                  Nothing => pure $ Left EBUFFER
                       Left c => pure $ Left c
                       Right (buf, _) => let n' = min (n*2) 65536 in recvRec (buf :: acc) n'
 

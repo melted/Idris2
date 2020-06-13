@@ -3,6 +3,8 @@ module Data.Buffer
 import System.Directory
 import System.File
 
+import Data.List
+
 -- Reading and writing binary buffers. Note that this primitives are unsafe,
 -- in that they don't check that buffer locations are within bounds.
 -- We really need a safe wrapper!
@@ -275,7 +277,7 @@ resizeBuffer old newsize
          freeBuffer old
          pure (Just buf)
 
-export
+{- export
 concatBuffers : Buffer -> Buffer -> IO (Maybe Buffer)
 concatBuffers x y
     = do xSize <- rawSize x
@@ -285,7 +287,19 @@ concatBuffers x y
               | Nothing => pure Nothing
          copyData x 0 xSize buf 0
          copyData y 0 ySize buf xSize
-         freeBuffer x
-         freeBuffer y
+         pure (Just buf) -}
+
+export
+concatBuffers : HasIO io => List Buffer -> io (Maybe Buffer)
+concatBuffers xs
+    = do let sizes = map prim__bufferSize xs
+         let (ns, cumul) = foldl f (0,[]) sizes
+         Just buf <- newBuffer ns
+              | Nothing => pure Nothing
+         traverse (\(b, size, watermark) => copyData b 0 size buf watermark) (zip3 xs sizes cumul)
          pure (Just buf)
+    where
+        f : (Int, List Int) -> Int -> (Int, List Int)
+        f (s, cs) x = (s+x, s::cs)
+
 
