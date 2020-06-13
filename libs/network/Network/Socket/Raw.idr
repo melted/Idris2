@@ -7,7 +7,7 @@ module Network.Socket.Raw
 
 import public Network.Socket.Data
 
-import Network.FFI
+import Network.Socket.FFI
 
 -- ---------------------------------------------------------------- [ Pointers ]
 

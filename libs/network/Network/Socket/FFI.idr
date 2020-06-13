@@ -1,7 +1,7 @@
-||| FFI binding to the low-Level C Sockets bindings for Idris. 
-||| 
+||| FFI binding to the low-Level C Sockets bindings for Idris.
+|||
 ||| Modified (C) The Idris Community, 2020
-module Network.FFI
+module Network.Socket.FFI
 
 import Network.Socket.Data
 
@@ -24,12 +24,13 @@ idrnet_socket : (domain, type, protocol : Int) -> PrimIO Int
 
 %foreign "C:idrnet_bind,libidris2_support"
 export
-idrnet_bind : (sockfd : SocketDescriptor) -> (family, socket_type : Int) -> (host : String) 
-            -> (port : Port) -> PrimIO Int
-            
+idrnet_bind : (sockfd : SocketDescriptor) ->
+              (family, socket_type : Int) ->
+              (host : String) -> (port : Port) -> PrimIO Int
+
 %foreign "C:idrnet_connect,libidris2_support"
 export
-idrnet_connect : (sockfd : SocketDescriptor) -> (family, socket_type : Int) -> (host : String) 
+idrnet_connect : (sockfd : SocketDescriptor) -> (family, socket_type : Int) -> (host : String)
                -> (port : Port) -> PrimIO Int
 
 %foreign "C:idrnet_sockaddr_family,libidris2_support"
@@ -72,7 +73,7 @@ idrnet_recv : (sockfd : SocketDescriptor) -> (len : Int) -> PrimIO AnyPtr
 
 %foreign "C:idrnet_recv_buf,libidris2_support"
 export
-idrnet_recv_buf : (sockfd : SocketDescriptor) -> (buf : AnyPtr) -> (len : Int) 
+idrnet_recv_buf : (sockfd : SocketDescriptor) -> (buf : AnyPtr) -> (len : Int)
                -> PrimIO Int
 
 %foreign "C:idrnet_sendto,libidris2_support"
@@ -82,17 +83,17 @@ idrnet_sendto : (sockfd : SocketDescriptor) -> (dataString,host : String)
 
 %foreign "C:idrnet_sendto_buf,libidris2_support"
 export
-idrnet_sendto_buf : (sockfd : SocketDescriptor) -> (dataBuf : AnyPtr) -> (buf_len : Int) 
+idrnet_sendto_buf : (sockfd : SocketDescriptor) -> (dataBuf : AnyPtr) -> (buf_len : Int)
                  -> (host : String) -> (port : Port) -> (family : Int) -> PrimIO Int
-                 
+
 %foreign "C:idrnet_recvfrom,libidris2_support"
 export
-idrnet_recvfrom : (sockfd : SocketDescriptor) -> (len : Int) -> PrimIO AnyPtr                 
+idrnet_recvfrom : (sockfd : SocketDescriptor) -> (len : Int) -> PrimIO AnyPtr
 
 %foreign "C:idrnet_recvfrom_buf,libidris2_support"
 export
-idrnet_recvfrom_buf : (sockfd : SocketDescriptor) -> (buf : AnyPtr) -> (len : Int) 
-                   -> PrimIO AnyPtr                 
+idrnet_recvfrom_buf : (sockfd : SocketDescriptor) -> (buf : AnyPtr) -> (len : Int)
+                   -> PrimIO AnyPtr
 
 %foreign "C:idrnet_get_recv_res,libidris2_support"
 export
@@ -145,5 +146,5 @@ idrnet_peek : (ptr : AnyPtr) -> (offset : {-Unsigned-} Int) -> PrimIO {-Unsigned
 
 %foreign "C:idrnet_poke,libidris2_support"
 export
-idrnet_poke : (ptr : AnyPtr) -> (offset : {-Unsigned-} Int) -> (val : Int {- should be Char? -}) 
+idrnet_poke : (ptr : AnyPtr) -> (offset : {-Unsigned-} Int) -> (val : Int {- should be Char? -})
            -> PrimIO ()

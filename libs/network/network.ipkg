@@ -7,4 +7,4 @@ modules = Control.Linear.Network,
           Network.Socket,
           Network.Socket.Data,
           Network.Socket.Raw,
-          Network.FFI
+          Network.Socket.FFI
