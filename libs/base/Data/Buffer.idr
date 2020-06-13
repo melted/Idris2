@@ -274,3 +274,18 @@ resizeBuffer old newsize
          copyData old 0 len buf 0
          freeBuffer old
          pure (Just buf)
+
+export
+concatBuffers : Buffer -> Buffer -> IO (Maybe Buffer)
+concatBuffers x y
+    = do xSize <- rawSize x
+         ySize <- rawSize y
+         let newSize = xSize + ySize
+         Just buf <- newBuffer newSize
+              | Nothing => pure Nothing
+         copyData x 0 xSize buf 0
+         copyData y 0 ySize buf xSize
+         freeBuffer x
+         freeBuffer y
+         pure (Just buf)
+

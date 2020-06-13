@@ -73,7 +73,6 @@ int idrnet_recv_buf(int sockfd, void* buf, int len);
 int idrnet_sendto(int sockfd, char* data, char* host, int port, int family);
 int idrnet_sendto_buf(int sockfd, void* buf, int buf_len, char* host, int port, int family);
 
-
 // UDP Receive
 void* idrnet_recvfrom(int sockfd, int len);
 void* idrnet_recvfrom_buf(int sockfd, void* buf, int len);

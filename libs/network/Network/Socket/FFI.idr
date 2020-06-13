@@ -4,7 +4,7 @@
 module Network.Socket.FFI
 
 import Network.Socket.Data
-
+import Data.Buffer
 -- From sys/socket.h
 
 %foreign "C:close,libidris2_support"
@@ -65,7 +65,9 @@ idrnet_send : (sockfd : SocketDescriptor) -> (dataString : String) -> PrimIO Int
 %foreign "C:idrnet_send_buf,libidris2_support"
 export
 idrnet_send_buf : (sockfd : SocketDescriptor) -> (dataBuffer : AnyPtr) -> (len : Int) -> PrimIO Int
-
+%foreign "C:idrnet_send_buf,libidris2_support"
+export
+idrnet_send_buffer : (sockfd : SocketDescriptor) -> (dataBuffer : Buffer) -> (len : Int) -> PrimIO Int
 
 %foreign "C:idrnet_recv,libidris2_support"
 export
@@ -74,6 +76,12 @@ idrnet_recv : (sockfd : SocketDescriptor) -> (len : Int) -> PrimIO AnyPtr
 %foreign "C:idrnet_recv_buf,libidris2_support"
 export
 idrnet_recv_buf : (sockfd : SocketDescriptor) -> (buf : AnyPtr) -> (len : Int)
+               -> PrimIO Int
+
+
+%foreign "C:idrnet_recv_buf,libidris2_support"
+export
+idrnet_recv_buffer : (sockfd : SocketDescriptor) -> (buf : Buffer) -> (len : Int)
                -> PrimIO Int
 
 %foreign "C:idrnet_sendto,libidris2_support"
@@ -86,6 +94,11 @@ export
 idrnet_sendto_buf : (sockfd : SocketDescriptor) -> (dataBuf : AnyPtr) -> (buf_len : Int)
                  -> (host : String) -> (port : Port) -> (family : Int) -> PrimIO Int
 
+%foreign "C:idrnet_sendto_buf,libidris2_support"
+export
+idrnet_sendto_buffer : (sockfd : SocketDescriptor) -> (dataBuf : Buffer) -> (buf_len : Int)
+                 -> (host : String) -> (port : Port) -> (family : Int) -> PrimIO Int
+
 %foreign "C:idrnet_recvfrom,libidris2_support"
 export
 idrnet_recvfrom : (sockfd : SocketDescriptor) -> (len : Int) -> PrimIO AnyPtr
@@ -95,6 +108,10 @@ export
 idrnet_recvfrom_buf : (sockfd : SocketDescriptor) -> (buf : AnyPtr) -> (len : Int)
                    -> PrimIO AnyPtr
 
+%foreign "C:idrnet_recvfrom_buf,libidris2_support"
+export
+idrnet_recvfrom_buffer : (sockfd : SocketDescriptor) -> (buf : Buffer) -> (len : Int)
+                   -> PrimIO AnyPtr
 %foreign "C:idrnet_get_recv_res,libidris2_support"
 export
 idrnet_get_recv_res : (res_struct : AnyPtr) -> PrimIO Int
