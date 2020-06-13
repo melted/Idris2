@@ -5,9 +5,12 @@
 module Network.Socket
 
 import public Network.Socket.Data
+import Network.Socket.FFI
 import Network.Socket.Raw
+
+import Data.Buffer
 import Data.List
-import Network.FFI
+
 
 -- ----------------------------------------------------- [ Network Socket API. ]
 
@@ -47,7 +50,6 @@ bind sock addr port = do
                   (toCode $ socketType sock)
                   (saString addr)
                   port
-                
     if bind_res == (-1)
       then getErrno
       else pure 0
@@ -78,7 +80,7 @@ connect sock addr port = do
 export
 listen : HasIO io => (sock : Socket) -> io Int
 listen sock = do
-  listen_res <- primIO $ socket_listen (descriptor sock) BACKLOG 
+  listen_res <- primIO $ socket_listen (descriptor sock) BACKLOG
   if listen_res == (-1)
     then getErrno
     else pure 0
@@ -102,7 +104,7 @@ accept sock = do
 
   sockaddr_ptr <- primIO idrnet_create_sockaddr
 
-  accept_res <- primIO $ idrnet_accept (descriptor sock) sockaddr_ptr 
+  accept_res <- primIO $ idrnet_accept (descriptor sock) sockaddr_ptr
   if accept_res == (-1)
     then map Left getErrno
     else do
@@ -124,7 +126,7 @@ send : HasIO io
     -> (msg  : String)
     -> io (Either SocketError ResultCode)
 send sock dat = do
-  send_res <- primIO $ idrnet_send (descriptor sock) dat 
+  send_res <- primIO $ idrnet_send (descriptor sock) dat
 
   if send_res == (-1)
     then map Left getErrno
@@ -226,14 +228,14 @@ recvFrom : HasIO io
         -> io (Either SocketError (UDPAddrInfo, String, ResultCode))
 recvFrom sock bl = do
   recv_ptr <- primIO $ idrnet_recvfrom
-                       (descriptor sock) bl 
+                       (descriptor sock) bl
 
   let recv_ptr' = RFPtr recv_ptr
   isNull <- (nullPtr recv_ptr)
   if isNull
     then map Left getErrno
     else do
-      result <- primIO $ idrnet_get_recvfrom_res recv_ptr 
+      result <- primIO $ idrnet_get_recvfrom_res recv_ptr
       if result == -1
         then do
           freeRecvfromStruct recv_ptr'
