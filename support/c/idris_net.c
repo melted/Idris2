@@ -32,22 +32,6 @@ static int check_init(void) {
 #endif
 
 
-void buf_htonl(void* buf, int len) {
-    int* buf_i = (int*) buf;
-    int i;
-    for (i = 0; i < (len / sizeof(int)) + 1; i++) {
-        buf_i[i] = htonl(buf_i[i]);
-    }
-}
-
-void buf_ntohl(void* buf, int len) {
-    int* buf_i = (int*) buf;
-    int i;
-    for (i = 0; i < (len / sizeof(int)) + 1; i++) {
-        buf_i[i] = ntohl(buf_i[i]);
-    }
-}
-
 void* idrnet_malloc(int size) {
     return malloc(size);
 }
@@ -202,7 +186,6 @@ int idrnet_send_buf(int sockfd, void* data, int len) {
     void* buf_cpy = malloc(len);
     memset(buf_cpy, 0, len);
     memcpy(buf_cpy, data, len);
-    buf_htonl(buf_cpy, len);
     int res = send(sockfd, buf_cpy, len, 0);
     free(buf_cpy);
     return res;
@@ -225,9 +208,6 @@ void* idrnet_recv(int sockfd, int len) {
 
 int idrnet_recv_buf(int sockfd, void* buf, int len) {
     int recv_res = recv(sockfd, buf, len, 0);
-    if (recv_res != -1) {
-        buf_ntohl(buf, len);
-    }
     return recv_res;
 }
 
@@ -275,8 +255,6 @@ int idrnet_sendto_buf(int sockfd, void* buf, int buf_len, char* host, int port, 
         //printf("lib err: sendto getaddrinfo \n");
         return -1;
     }
-
-    buf_htonl(buf, buf_len);
 
     int send_res = sendto(sockfd, buf, buf_len, 0,
                         remote_host->ai_addr, remote_host->ai_addrlen);
@@ -342,7 +320,6 @@ void* idrnet_recvfrom_buf(int sockfd, void* buf, int len) {
     // Payload will be NULL -- since it's been put into the user-specified buffer. We
     // still need the return struct to get our hands on the remote address, though.
     if (recv_res > 0) {
-        buf_ntohl(buf, len);
         ret->payload = NULL;
         ret->remote_addr = remote_addr;
     }
