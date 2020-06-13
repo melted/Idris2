@@ -1,11 +1,24 @@
 module Main
 
+import Data.Buffer
 import System
 import System.Info
 import Network.Socket
 import Network.Socket.Data
 import Network.Socket.Raw
+%default partial
 
+
+stringToBuffer : String -> IO Buffer
+stringToBuffer str = do
+    Just buf <- newBuffer (stringByteLength str)
+    setString buf 0 str
+    pure buf
+
+bufferToString : Buffer -> IO String
+bufferToString buf = getString buf 0 !(rawSize buf)
+
+partial
 runServer : IO (Either String (Port, ThreadID))
 runServer = do
   Right sock <- socket AF_INET Stream 0
@@ -29,11 +42,12 @@ runServer = do
         | Left err => putStrLn ("Failed to accept on socket with error: " ++ show err)
       Right  (str, _) <- recv s 1024
         | Left err => putStrLn ("Failed to accept on socket with error: " ++ show err)
-      putStrLn ("Received: " ++ str)
-      Right n <- send s ("echo: " ++ str)
+      putStrLn ("Received: " ++ !(bufferToString str))
+      Right n <- send s !(stringToBuffer ("echo: " ++ !(bufferToString str)))
         | Left err => putStrLn ("Server failed to send data with error: " ++ show err)
       pure ()
 
+partial
 runClient : Port -> IO ()
 runClient serverPort = do
   Right sock <- socket AF_INET Stream 0
@@ -42,14 +56,15 @@ runClient serverPort = do
   if res /= 0
     then putStrLn ("Failed to connect client to port " ++ show serverPort ++ ": " ++ show res)
     else do
-      Right n <- send sock ("hello world!")
+      Right n <- send sock !(stringToBuffer "hello world!")
         | Left err => putStrLn ("Client failed to send data with error: " ++ show err)
       Right (str, _) <- recv sock 1024
         | Left err => putStrLn ("Client failed to receive on socket with error: " ++ show err)
       -- assuming that stdout buffers get flushed in between system calls, this is "guaranteed"
       -- to be printed after the server prints its own message
-      putStrLn ("Received: " ++ str)
+      putStrLn ("Received: " ++ !(bufferToString str))
 
+partial
 main : IO ()
 main = do
   Right (serverPort, tid) <- runServer
