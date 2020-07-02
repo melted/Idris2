@@ -12,6 +12,36 @@ import Data.Buffer
 import Data.List
 
 
+export
+interface ToBuffer a where
+  toBuffer : HasIO io => a -> io Buffer
+
+export
+interface FromBuffer a where
+  fromBuffer : HasIO io => Buffer -> io a
+
+export
+ToBuffer Buffer where
+  toBuffer = pure
+
+export
+FromBuffer Buffer where
+  fromBuffer = pure
+
+export
+ToBuffer String where
+  toBuffer s = do
+    Just buf <- newBuffer $ stringByteLength s
+      | Nothing => toBuffer s -- Looks dangerous but it will never get here
+    setString buf 0 s
+    pure buf
+  
+export
+FromBuffer String where
+  fromBuffer buf = do
+    size <- rawSize buf
+    getString buf 0 size
+
 -- ----------------------------------------------------- [ Network Socket API. ]
 
 ||| Creates a UNIX socket with the given family, socket type and protocol
@@ -121,12 +151,13 @@ accept sock = do
 ||| @sock The socket on which to send the message.
 ||| @msg  The data to send.
 export
-send : HasIO io
+send : HasIO io => ToBuffer a
     => (sock : Socket)
-    -> (msg  : Buffer)
+    -> (msg  : a)
     -> io (Either SocketError ResultCode)
 send sock dat = do
-  send_res <- primIO $ idrnet_send_buffer (descriptor sock) dat !(rawSize dat)
+  buf <- toBuffer dat
+  send_res <- primIO $ idrnet_send_buffer (descriptor sock) buf !(rawSize buf)
   if send_res == (-1)
     then map Left getErrno
     else pure $ Right send_res
@@ -141,10 +172,10 @@ send sock dat = do
 ||| @sock The socket on which to receive the message.
 ||| @len  How much of the data to receive.
 export
-recv : HasIO io
+recv : HasIO io => FromBuffer a
     => (sock : Socket)
     -> (len : ByteLength)
-    -> io (Either SocketError (Buffer, ResultCode))
+    -> io (Either SocketError (a, ResultCode))
 recv sock len = do
   -- Firstly make the request, get some kind of recv structure which
   -- contains the result of the recv and possibly the retrieved payload
@@ -163,7 +194,8 @@ recv sock len = do
            freeBuffer buf
            pure $ Left 0
         else do
-           pure $ Right (buf, recv_res)
+           dat <- fromBuffer buf
+           pure $ Right (dat, recv_res)
 
 ||| Receive all the remaining data on the specified socket.
 |||
@@ -172,13 +204,13 @@ recv sock len = do
 |||
 ||| @sock The socket on which to receive the message.
 export
-recvAll : HasIO io => (sock : Socket) -> io (Either SocketError Buffer)
+recvAll : HasIO io => FromBuffer a => (sock : Socket) -> io (Either SocketError a)
 recvAll sock = recvRec [] 64
   where
-    recvRec : List Buffer -> Int -> io (Either SocketError Buffer)
+    recvRec : List Buffer -> Int -> io (Either SocketError a)
     recvRec acc n = case !(recv sock n) of
                       Left 0 => case !(concatBuffers (reverse acc)) of
-                                  Just buf => pure $ Right buf
+                                  Just buf => pure $ Right !(fromBuffer buf)
                                   Nothing => pure $ Left EBUFFER
                       Left c => pure $ Left c
                       Right (buf, _) => let n' = min (n*2) 65536 in recvRec (buf :: acc) n'
@@ -194,15 +226,16 @@ recvAll sock = recvRec [] 64
 ||| @port The port on which to send the message.
 ||| @msg  The message to send.
 export
-sendTo : HasIO io
+sendTo : HasIO io => ToBuffer a
       => (sock : Socket)
       -> (addr : SocketAddress)
       -> (port : Port)
-      -> (msg  : Buffer)
+      -> (msg  : a)
       -> io (Either SocketError ByteLength)
 sendTo sock addr p dat = do
+  buf <- toBuffer dat
   sendto_res <- primIO $ idrnet_sendto_buffer
-                (descriptor sock) dat !(rawSize dat) (show addr) p (toCode $ family sock)
+                (descriptor sock) buf !(rawSize buf) (show addr) p (toCode $ family sock)
 
   if sendto_res == (-1)
     then map Left getErrno
@@ -220,10 +253,10 @@ sendTo sock addr p dat = do
 ||| @len  Size of the expected message.
 |||
 export
-recvFrom : HasIO io
+recvFrom : HasIO io => FromBuffer a
         => (sock : Socket)
         -> (len  : ByteLength)
-        -> io (Either SocketError (UDPAddrInfo, Buffer, ResultCode))
+        -> io (Either SocketError (UDPAddrInfo, a, ResultCode))
 recvFrom sock bl = do
   Just buf <- newBuffer bl
       | Nothing => pure $ Left EBUFFER
@@ -247,4 +280,5 @@ recvFrom sock bl = do
           port <- foreignGetRecvfromPort recv_ptr'
           addr <- foreignGetRecvfromAddr recv_ptr'
           freeRecvfromStruct recv_ptr'
-          pure $ Right (MkUDPAddrInfo addr port, buf, result)
+          dat <- fromBuffer buf
+          pure $ Right (MkUDPAddrInfo addr port, dat, result)
