@@ -1040,7 +1040,7 @@ Traversable List where
 public export
 elem : Eq a => a -> List a -> Bool
 x `elem` [] = False
-x `elem` (y :: ys) = if x == y then True else x `elem` ys
+x `elem` (y :: ys) = x == y || elem x ys
 
 -------------
 -- STREAMS --
