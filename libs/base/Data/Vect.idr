@@ -6,6 +6,8 @@ import public Data.Fin
 
 import Decidable.Equality
 
+%default total
+
 public export
 data Vect : (len : Nat) -> (elem : Type) -> Type where
   ||| Empty vector
@@ -20,13 +22,13 @@ data Vect : (len : Nat) -> (elem : Type) -> Type where
 public export
 length : (xs : Vect len elem) -> Nat
 length [] = 0
-length (x::xs) = 1 + length xs
+length (_::xs) = 1 + length xs
 
 ||| Show that the length function on vectors in fact calculates the length
 export
-lengthCorrect : (0 len : Nat) -> (xs : Vect len elem) -> length xs = len
-lengthCorrect Z     []        = Refl
-lengthCorrect (S n) (x :: xs) = rewrite lengthCorrect n xs in Refl
+lengthCorrect : (xs : Vect len elem) -> length xs = len
+lengthCorrect []        = Refl
+lengthCorrect (_ :: xs) = rewrite lengthCorrect xs in Refl
 
 ||| If two vectors are equal, their heads and tails are equal
 export
@@ -44,7 +46,7 @@ vectInjective Refl = (Refl, Refl)
 ||| ```
 public export
 tail : Vect (S len) elem -> Vect len elem
-tail (x::xs) = xs
+tail (_::xs) = xs
 
 ||| Only the first element of the vector
 |||
@@ -53,7 +55,7 @@ tail (x::xs) = xs
 ||| ```
 public export
 head : Vect (S len) elem -> elem
-head (x::xs) = x
+head (x::_) = x
 
 ||| The last element of the vector
 |||
@@ -62,8 +64,8 @@ head (x::xs) = x
 ||| ```
 public export
 last : Vect (S len) elem -> elem
-last (x::[])    = x
-last (x::y::ys) = last $ y::ys
+last [x]        = x
+last (_::y::ys) = last $ y::ys
 
 ||| All but the last element of the vector
 |||
@@ -72,7 +74,7 @@ last (x::y::ys) = last $ y::ys
 ||| ```
 public export
 init : Vect (S len) elem -> Vect len elem
-init (x::[])    = []
+init [_]        = []
 init (x::y::ys) = x :: init (y::ys)
 
 ||| Extract a particular element from a vector
@@ -82,8 +84,8 @@ init (x::y::ys) = x :: init (y::ys)
 ||| ```
 public export
 index : Fin len -> Vect len elem -> elem
-index FZ     (x::xs) = x
-index (FS k) (x::xs) = index k xs
+index FZ     (x::_)  = x
+index (FS k) (_::xs) = index k xs
 
 ||| Insert an element at a particular index
 |||
@@ -102,10 +104,8 @@ insertAt (FS k) y (x::xs) = x :: insertAt k y xs
 ||| ```
 public export
 deleteAt : {len : _} -> Fin (S len) -> Vect (S len) elem -> Vect len elem
-deleteAt             FZ     (x::xs) = xs
-deleteAt {len = S m} (FS k) (x::xs) = x :: deleteAt k xs
-deleteAt {len = Z}   (FS k) (x::xs) impossible
-deleteAt             _      []      impossible
+deleteAt             FZ     (_::xs) = xs
+deleteAt {len = S _} (FS k) (x::xs) = x :: deleteAt k xs
 
 ||| Replace an element at a particlar index with another
 |||
@@ -114,7 +114,7 @@ deleteAt             _      []      impossible
 ||| ```
 public export
 replaceAt : Fin len -> elem -> Vect len elem -> Vect len elem
-replaceAt FZ     y (x::xs) = y :: xs
+replaceAt FZ     y (_::xs) = y :: xs
 replaceAt (FS k) y (x::xs) = x :: replaceAt k y xs
 
 ||| Replace the element at a particular index with the result of applying a function to it
@@ -129,7 +129,6 @@ public export
 updateAt : (i : Fin len) -> (f : elem -> elem) -> (xs : Vect len elem) -> Vect len elem
 updateAt FZ     f (x::xs) = f x :: xs
 updateAt (FS k) f (x::xs) = x :: updateAt k f xs
-
 
 ||| Append two vectors
 |||
@@ -151,7 +150,7 @@ public export
 ||| ```
 public export
 replicate : (len : Nat) -> (x : elem) -> Vect len elem
-replicate Z     x = []
+replicate Z     _ = []
 replicate (S k) x = x :: replicate k x
 
 ||| Merge two ordered vectors
@@ -161,10 +160,8 @@ replicate (S k) x = x :: replicate k x
 ||| ```
 export
 mergeBy : (elem -> elem -> Ordering) -> (xs : Vect n elem) -> (ys : Vect m elem) -> Vect (n + m) elem
-mergeBy order [] [] = []
-mergeBy order [] (x :: xs) = x :: xs
-mergeBy {n = S k} order (x :: xs) [] = rewrite plusZeroRightNeutral (S k) in
-                                               x :: xs
+mergeBy     _ [] ys = ys
+mergeBy {n} _ xs [] = rewrite plusZeroRightNeutral n in xs
 mergeBy {n = S k} {m = S k'} order (x :: xs) (y :: ys)
      = case order x y of
             LT => x :: mergeBy order xs (y :: ys)
@@ -754,7 +751,7 @@ vectToMaybe (x::xs) = Just x
 -- Misc
 --------------------------------------------------------------------------------
 
-||| Filter out Nothings from Vect
+||| Filter out Nothings from Vect and unwrap the Justs
 |||
 ||| ```idris example
 ||| catMaybes [Just 1, Just 2, Nothing, Nothing, Just 5]
