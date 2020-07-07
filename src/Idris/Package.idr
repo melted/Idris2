@@ -558,11 +558,10 @@ processPackageOpts opts
     = do (MkPFR (Just (cmd, f)) opts' err) <- filterPackageOpts (MkPFR Nothing Nil False) opts
              | (MkPFR Nothing opts _) => pure False
 
-         if err
-           then do coreLift (putStrLn errorMsg)
-                   pure True
-           else do processPackage cmd f opts'
-                   pure True
+         do if err
+               then coreLift (putStrLn errorMsg)
+               else processPackage cmd f opts'
+            pure True
 
 
 -- find an ipkg file in one of the parent directories
