@@ -465,6 +465,7 @@ runRepl fname = do
     Just fn => do
       errs <- loadMainFile fn
       displayErrors errs
+      pure ()
   repl {u} {s}
 
 
