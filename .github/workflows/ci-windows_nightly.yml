@@ -1,0 +1,74 @@
+name: Windows Nightly
+on:
+  workflow_dispatch:
+    inputs:
+      thing:
+        description: 'A thing'
+        required: false
+        default: 'np'
+  schedule:
+    - cron: '5 3 * * *'
+env:
+  MSYSTEM: MINGW64
+  MSYS2_PATH_TYPE: inherit
+  SCHEME: scheme
+  CC: gcc
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Init
+        run: |
+          git config --global core.autocrlf false
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Get Chez Scheme
+        run: |
+          git clone --depth 1 https://github.com/cisco/ChezScheme
+          c:\msys64\usr\bin\bash -l -c "pacman -S --noconfirm tar make"
+          echo "::set-env name=PWD::$(c:\msys64\usr\bin\cygpath -u $(pwd))"
+      - name: Configure and Build Chez Scheme
+        run: |
+          c:\msys64\usr\bin\bash -l -c "cd $env:PWD && cd ChezScheme && ./configure --threads && make"
+      - name: Set Path
+        run: |
+          $chez="$(pwd)\ChezScheme\ta6nt\bin\ta6nt"
+          $idris="$(pwd)\dist\idris2"
+          echo "::add-path::$chez"
+          echo "::add-path::$idris\bin"
+          echo "::set-env name=IDRIS_PREFIX::$idris"
+          echo "::set-env name=PREFIX::$(c:\msys64\usr\bin\cygpath -u $idris)"
+      - name: Test Scheme
+        run: |
+          scheme --version
+      - name: Bootstrap and install
+        run: c:\msys64\usr\bin\bash -l -c "cd $env:PWD && make bootstrap && make install"
+      - name: Package
+        run: |
+            $idris = $env:IDRIS_PREFIX
+            mkdir -p $idris\scheme
+            cp -r ChezScheme\ta6nt\bin\ta6nt\* $idris\scheme
+            cp -r ChezScheme\ta6nt\boot\ta6nt\* $idris\scheme
+            rm $idris\bin\idris
+            rm $idris\bin\idris.cmd
+            $shell = @'
+            #!/bin/sh
+            DIR="`realpath "$0"`"
+            export PATH="`dirname "$DIR"`/../"scheme":`dirname "$DIR"`/"idris2_app":$PATH"
+            scheme --script "$(dirname "$DIR")/idris2_app\idris2.so" "$@"
+            '@
+            Write-Output $shell | Out-File -Encoding ascii $idris\bin\idris
+            $cmd = @'
+            @echo off
+            set APPDIR=%~dp0
+            set PATH=%APPDIR%\..\scheme;%APPDIR%\idris2_app;%PATH%
+            scheme.exe --script "%APPDIR%/idris2_app\idris2.so" %*
+            '@
+            Write-Output $cmd | Out-File -Encoding ascii $idris\bin\idris.cmd
+            7z a idris2.7z .\dist\idris2\
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: idris2 nightly
+          path: idris2.7z
